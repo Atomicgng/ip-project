@@ -3,13 +3,11 @@ const axios = require("axios");
 
 const app = express();
 
-// Needed for Render / proxies (:contentReference[oaicite:0]{index=0})
+// Required for proxies (Render / Cloudflare)
 app.set("trust proxy", true);
 
-/**
- * Get real client IP safely
- */
-function getClientIp(req) {
+// Get real IP safely
+function getIP(req) {
     return (
         req.headers["cf-connecting-ip"] ||
         req.headers["x-forwarded-for"]?.split(",")[0]?.trim() ||
@@ -18,61 +16,38 @@ function getClientIp(req) {
     );
 }
 
-/**
- * Primary Geo lookup (more accurate than ipinfo)
- * Using ip-api (good free accuracy in Europe)
- */
-async function geoFromIpApi(ip) {
-    const res = await axios.get(`http://ip-api.com/json/${ip}?fields=status,country,regionName,city,query`);
-    if (res.data.status === "success") {
-        return {
-            city: res.data.city,
-            region: res.data.regionName,
-            country: res.data.country
-        };
-    }
-    return null;
-}
-
-/**
- * Fallback Geo lookup (ipinfo backup)
- */
-async function geoFromIpInfo(ip) {
-    const res = await axios.get(`https://ipinfo.io/${ip}/json`);
-    return {
-        city: res.data.city,
-        region: res.data.region,
-        country: res.data.country
-    };
-}
-
-/**
- * Try multiple providers for best accuracy
- */
+// Geo lookup (more accurate first, fallback second)
 async function getLocation(ip) {
     try {
-        // 1st choice: ip-api (usually more accurate for EU)
-        let data = await geoFromIpApi(ip);
-        if (data?.country) return data;
+        const res = await axios.get(`http://ip-api.com/json/${ip}?fields=status,country,regionName,city`);
+        if (res.data.status === "success") {
+            return {
+                city: res.data.city,
+                region: res.data.regionName,
+                country: res.data.country
+            };
+        }
+    } catch { }
 
-        // fallback: ipinfo
-        data = await geoFromIpInfo(ip);
-        if (data?.country) return data;
+    try {
+        const res = await axios.get(`https://ipinfo.io/${ip}/json`);
+        return {
+            city: res.data.city,
+            region: res.data.region,
+            country: res.data.country
+        };
+    } catch { }
 
-        return null;
-    } catch {
-        return null;
-    }
+    return null;
 }
 
 app.get("/", async (req, res) => {
     try {
-        const ip = getClientIp(req);
+        const ip = getIP(req);
         console.log("Visitor IP:", ip);
 
-        let locationText = "Unknown";
+        let location = "Unknown";
 
-        // Skip private IPs
         const isPrivate =
             ip.startsWith("10.") ||
             ip.startsWith("192.168.") ||
@@ -81,21 +56,22 @@ app.get("/", async (req, res) => {
             ip === "127.0.0.1";
 
         if (!isPrivate) {
-            const loc = await getLocation(ip);
+            const data = await getLocation(ip);
 
-            if (loc) {
-                locationText = `${loc.city || "Unknown city"}, ${loc.region || "Unknown region"}, ${loc.country || "Unknown country"}`;
+            if (data) {
+                location = `${data.city || "Unknown city"}, ${data.region || "Unknown region"}, ${data.country || "Unknown country"}`;
             }
         } else {
-            locationText = "Local / Internal IP";
+            location = "Local / Internal IP";
         }
 
         res.send(`
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>Analytics Dashboard</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8" />
+  <title>Visitor Analytics</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
   <style>
     body {
@@ -150,7 +126,7 @@ app.get("/", async (req, res) => {
 
 <body>
   <div class="card">
-    <h1>Analytics Dashboard</h1>
+    <h1>Visitor Analytics</h1>
 
     <div class="box">
       <div class="label">Visitor IP</div>
@@ -159,11 +135,11 @@ app.get("/", async (req, res) => {
 
     <div class="box">
       <div class="label">Approx Location</div>
-      ${locationText}
+      ${location}
     </div>
 
     <div class="note">
-      Location is estimated using multiple IP databases (approximate only).
+      IP geolocation is approximate and may vary by ISP routing.
     </div>
   </div>
 </body>
@@ -172,7 +148,7 @@ app.get("/", async (req, res) => {
 
     } catch (err) {
         console.log(err);
-        res.status(500).send("Error");
+        res.status(500).send("Server error");
     }
 });
 
