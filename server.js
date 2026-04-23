@@ -6,20 +6,30 @@ const app = express();
 // Required for proxies (Render / Cloudflare)
 app.set("trust proxy", true);
 
+// Health check route (IMPORTANT for Render)
+app.get("/health", (req, res) => {
+    res.status(200).send("OK");
+});
+
 // Get real IP safely
 function getIP(req) {
-    return (
+    const raw =
         req.headers["cf-connecting-ip"] ||
-        req.headers["x-forwarded-for"]?.split(",")[0]?.trim() ||
+        req.headers["x-forwarded-for"] ||
         req.socket.remoteAddress ||
-        req.ip
-    );
+        req.ip;
+
+    // x-forwarded-for can be a list
+    return raw.split(",")[0].trim();
 }
 
-// Geo lookup (more accurate first, fallback second)
+// Better geo lookup (priority order)
 async function getLocation(ip) {
     try {
-        const res = await axios.get(`http://ip-api.com/json/${ip}?fields=status,country,regionName,city`);
+        const res = await axios.get(
+            `http://ip-api.com/json/${ip}?fields=status,country,regionName,city,query`
+        );
+
         if (res.data.status === "success") {
             return {
                 city: res.data.city,
@@ -41,6 +51,7 @@ async function getLocation(ip) {
     return null;
 }
 
+// Main route
 app.get("/", async (req, res) => {
     try {
         const ip = getIP(req);
@@ -48,12 +59,13 @@ app.get("/", async (req, res) => {
 
         let location = "Unknown";
 
+        // Block local/private IPs properly
         const isPrivate =
             ip.startsWith("10.") ||
             ip.startsWith("192.168.") ||
-            ip.startsWith("172.") ||
+            ip.startsWith("127.") ||
             ip === "::1" ||
-            ip === "127.0.0.1";
+            ip.startsWith("172.");
 
         if (!isPrivate) {
             const data = await getLocation(ip);
@@ -65,12 +77,12 @@ app.get("/", async (req, res) => {
             location = "Local / Internal IP";
         }
 
-        res.send(`
+        res.status(200).send(`
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Visitor Analytics</title>
+  <title>Cryonix Analytics</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
   <style>
@@ -126,7 +138,7 @@ app.get("/", async (req, res) => {
 
 <body>
   <div class="card">
-    <h1>Visitor Analytics</h1>
+    <h1>Cryonix</h1>
 
     <div class="box">
       <div class="label">Visitor IP</div>
@@ -152,8 +164,9 @@ app.get("/", async (req, res) => {
     }
 });
 
-const PORT = process.env.PORT || 3000;
+// IMPORTANT for Render
+const PORT = process.env.PORT || 10000;
 
-app.listen(PORT, () => {
+app.listen(PORT, "0.0.0.0", () => {
     console.log("Server running on port", PORT);
 });
