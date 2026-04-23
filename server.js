@@ -3,31 +3,67 @@ const axios = require("axios");
 
 const app = express();
 
-// Required for proxies (Render / Cloudflare)
+// Trust proxy (required for Render / Cloudflare)
 app.set("trust proxy", true);
 
-// Health check route (IMPORTANT for Render)
-app.get("/health", (req, res) => {
-    res.status(200).send("OK");
-});
-
-// Get real IP safely
+// --------------------
+// IP extraction (best method)
+// --------------------
 function getIP(req) {
-    const raw =
-        req.headers["cf-connecting-ip"] ||
-        req.headers["x-forwarded-for"] ||
-        req.socket.remoteAddress ||
-        req.ip;
+    const xff = req.headers["x-forwarded-for"];
 
-    // x-forwarded-for can be a list
-    return raw.split(",")[0].trim();
+    if (xff && typeof xff === "string") {
+        return xff.split(",")[0].trim();
+    }
+
+    return (
+        req.headers["cf-connecting-ip"] ||
+        req.socket.remoteAddress ||
+        req.ip
+    );
 }
 
-// Better geo lookup (priority order)
+// --------------------
+// Bot / proxy detection (basic but useful)
+// --------------------
+function isBot(req, ip) {
+    const ua = (req.headers["user-agent"] || "").toLowerCase();
+
+    // obvious bots
+    const botKeywords = [
+        "bot",
+        "crawler",
+        "spider",
+        "headless",
+        "python",
+        "curl",
+        "wget",
+        "scrapy"
+    ];
+
+    if (botKeywords.some(b => ua.includes(b))) return true;
+
+    // private / internal traffic
+    if (
+        ip.startsWith("10.") ||
+        ip.startsWith("192.168.") ||
+        ip.startsWith("127.") ||
+        ip === "::1" ||
+        ip.startsWith("172.")
+    ) {
+        return true;
+    }
+
+    return false;
+}
+
+// --------------------
+// Geo lookup (fast + fallback)
+// --------------------
 async function getLocation(ip) {
     try {
         const res = await axios.get(
-            `http://ip-api.com/json/${ip}?fields=status,country,regionName,city,query`
+            `http://ip-api.com/json/${ip}?fields=status,country,regionName,city`
         );
 
         if (res.data.status === "success") {
@@ -51,30 +87,33 @@ async function getLocation(ip) {
     return null;
 }
 
+// --------------------
 // Main route
+// --------------------
 app.get("/", async (req, res) => {
     try {
         const ip = getIP(req);
-        console.log("Visitor IP:", ip);
+        const bot = isBot(req, ip);
+
+        // Skip logging bots (but still allow page load)
+        if (!bot) {
+            console.log("REAL VISITOR:");
+            console.log("IP:", ip);
+            console.log("UA:", req.headers["user-agent"]);
+        } else {
+            console.log("BOT FILTERED:", ip);
+        }
 
         let location = "Unknown";
 
-        // Block local/private IPs properly
-        const isPrivate =
-            ip.startsWith("10.") ||
-            ip.startsWith("192.168.") ||
-            ip.startsWith("127.") ||
-            ip === "::1" ||
-            ip.startsWith("172.");
-
-        if (!isPrivate) {
+        if (!bot) {
             const data = await getLocation(ip);
 
             if (data) {
                 location = `${data.city || "Unknown city"}, ${data.region || "Unknown region"}, ${data.country || "Unknown country"}`;
             }
         } else {
-            location = "Local / Internal IP";
+            location = "Bot / Proxy / Internal traffic";
         }
 
         res.status(200).send(`
@@ -151,7 +190,7 @@ app.get("/", async (req, res) => {
     </div>
 
     <div class="note">
-      IP geolocation is approximate and may vary by ISP routing.
+      Bot filtering enabled • IP geolocation is approximate
     </div>
   </div>
 </body>
@@ -164,9 +203,9 @@ app.get("/", async (req, res) => {
     }
 });
 
-// IMPORTANT for Render
+// Render port binding
 const PORT = process.env.PORT || 10000;
 
 app.listen(PORT, "0.0.0.0", () => {
-    console.log("Server running on port", PORT);
+    console.log("Cryonix running on port", PORT);
 });
