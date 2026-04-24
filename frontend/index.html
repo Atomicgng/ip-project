@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cryonix Store</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+    <!-- TOP BAR -->
+    <div class="topbar">
+        <div class="logo">CRYONIX</div>
+
+        <div class="wallet">
+            Wallet: <span id="balance">€12,450</span>
+        </div>
+    </div>
+
+    <!-- NAV -->
+    <nav>
+        <a href="#">Home</a>
+        <a href="#">Shop</a>
+        <a href="#">Drops</a>
+        <a href="#">About</a>
+    </nav>
+
+    <!-- HERO -->
+    <section class="hero">
+        <h1>Luxury Streetwear <span>Archive</span></h1>
+        <p>Curated high-end digital fashion pieces</p>
+    </section>
+
+    <!-- PRODUCTS -->
+    <section class="products">
+
+        <div class="product">
+            <img src="https://images.pexels.com/photos/1040945/pexels-photo-1040945.jpeg" />
+            <h3>Cryonix Noir Coat</h3>
+            <p class="price">€4,800</p>
+            <button onclick="view('Cryonix Noir Coat')">View Item</button>
+        </div>
+
+        <div class="product">
+            <img src="https://images.pexels.com/photos/1043474/pexels-photo-1043474.jpeg" />
+            <h3>Cryonix Shadow Jacket</h3>
+            <p class="price">€3,600</p>
+            <button onclick="view('Cryonix Shadow Jacket')">View Item</button>
+        </div>
+
+        <div class="product">
+            <img src="https://images.pexels.com/photos/1126993/pexels-photo-1126993.jpeg" />
+            <h3>Cryonix Urban Set</h3>
+            <p class="price">€6,200</p>
+            <button onclick="view('Cryonix Urban Set')">View Item</button>
+        </div>
+
+        <div class="product">
+            <img src="https://images.pexels.com/photos/1043473/pexels-photo-1043473.jpeg" />
+            <h3>Cryonix Minimal Hoodie</h3>
+            <p class="price">€1,950</p>
+            <button onclick="view('Cryonix Minimal Hoodie')">View Item</button>
+        </div>
+
+    </section>
+
+    <!-- POPUP -->
+    <div id="popup" class="popup">
+        <div class="popup-box">
+            <h2>Item Preview</h2>
+            <p id="popup-text"></p>
+            <button onclick="closePopup()">Close</button>
+        </div>
+    </div>
+
+    <script>
+        function view(item) {
+            document.getElementById("popup-text").innerText =
+                item + " — Exclusive Cryonix drop (limited availability)";
+
+            document.getElementById("popup").style.display = "flex";
+        }
+
+        function closePopup() {
+            document.getElementById("popup").style.display = "none";
+        }
+    </script>
+
+</body>
+</html>
